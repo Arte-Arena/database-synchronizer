@@ -7,11 +7,29 @@ import (
 	"os"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+const (
+	SUPER_ADMIN = iota + 1
+	IT
+	ADMIN
+	LEADER
+	COLLABORATOR
+	DESIGNER
+	DESIGNER_COORDINATOR
+	PRODUCTION
+	COMMERCIAL
+)
+
 type MongoDBUsers struct {
+	ID    bson.ObjectID `json:"id,omitempty" bson:"_id,omitempty"`
+	OldID uint          `json:"old_id" bson:"old_id"`
+	Name  string        `json:"name" bson:"name"`
+	Email string        `json:"email" bson:"email"`
+	Role  string        `json:"role" bson:"role"`
 }
 
 type MYSQLUsers struct {
@@ -33,7 +51,7 @@ func SyncUsers() {
 	opts := options.Client().ApplyURI(mongoURI)
 	mongoClient, err := mongo.Connect(opts)
 	if err != nil {
-		// PANIC HERE
+		// LOG HERE
 	}
 	defer mongoClient.Disconnect(ctx)
 
