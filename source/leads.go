@@ -1,9 +1,18 @@
 package main
 
 import (
+	"context"
+	"database/sql"
+	"database_sync/source/database"
+	"database_sync/source/utils"
+	"fmt"
+	"os"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type MongoDBLeads struct {
@@ -27,4 +36,117 @@ type MongoDBLeads struct {
 }
 
 type MySQLLeads struct {
+	Name      *string   `db:"nome"`
+	Email     *string   `db:"email"`
+	Phone     *string   `db:"telefone"`
+	CreatedAt time.Time `db:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"`
+}
+
+func SyncLeads() error {
+	mysqlURI := os.Getenv("MYSQL_URI")
+
+	mysqlDB, err := sql.Open("mysql", mysqlURI)
+	if err != nil {
+		return fmt.Errorf("failed to connect to MySQL: %w", err)
+	}
+	defer mysqlDB.Close()
+
+	mysqlDB.SetConnMaxLifetime(database.MYSQL_CONN_MAX_LIFETIME)
+	mysqlDB.SetMaxOpenConns(database.MYSQL_MAX_OPEN_CONNS)
+	mysqlDB.SetMaxIdleConns(database.MYSQL_MAX_IDLE_CONNS)
+
+	if err := mysqlDB.Ping(); err != nil {
+		return fmt.Errorf("failed to ping MySQL: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), database.MONGODB_TIMEOUT)
+	defer cancel()
+
+	mongoURI := os.Getenv(utils.MONGODB_URI)
+	opts := options.Client().ApplyURI(mongoURI)
+	mongoClient, err := mongo.Connect(opts)
+	if err != nil {
+		return fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+	defer mongoClient.Disconnect(ctx)
+
+	collection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_LEADS)
+
+	if _, err := collection.DeleteMany(ctx, bson.D{}); err != nil {
+		return fmt.Errorf("failed to clear MongoDB leads collection: %w", err)
+	}
+
+	rows, err := mysqlDB.Query("SELECT nome, email, telefone, created_at, updated_at FROM octa_webhook")
+	if err != nil {
+		return fmt.Errorf("failed to query MySQL octa_webhook: %w", err)
+	}
+	defer rows.Close()
+
+	bulkOperations := []mongo.WriteModel{}
+
+	for rows.Next() {
+		lead := MySQLLeads{}
+
+		var createdAtStr, updatedAtStr []byte
+
+		err := rows.Scan(
+			&lead.Name,
+			&lead.Email,
+			&lead.Phone,
+			&createdAtStr,
+			&updatedAtStr,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to scan MySQL octa_webhook: %w", err)
+		}
+
+		lead.CreatedAt, err = time.Parse("2006-01-02 15:04:05", string(createdAtStr))
+		if err != nil {
+			return fmt.Errorf("failed to parse created_at datetime: %w", err)
+		}
+
+		lead.UpdatedAt, err = time.Parse("2006-01-02 15:04:05", string(updatedAtStr))
+		if err != nil {
+			return fmt.Errorf("failed to parse updated_at datetime: %w", err)
+		}
+
+		var name, phone string
+		if lead.Name != nil {
+			name = *lead.Name
+		}
+		if lead.Phone != nil {
+			phone = *lead.Phone
+		}
+
+		mongoLead := MongoDBLeads{
+			Name:      name,
+			Phone:     phone,
+			Source:    "Octa",
+			CreatedAt: lead.CreatedAt,
+			UpdatedAt: lead.UpdatedAt,
+		}
+
+		insertModel := mongo.NewInsertOneModel().SetDocument(mongoLead)
+		bulkOperations = append(bulkOperations, insertModel)
+
+		if len(bulkOperations) >= 500 {
+			if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+				return fmt.Errorf("failed to execute bulk write: %w", err)
+			}
+			bulkOperations = []mongo.WriteModel{}
+		}
+	}
+
+	if len(bulkOperations) > 0 {
+		if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+			return fmt.Errorf("failed to execute final bulk write: %w", err)
+		}
+	}
+
+	if err = rows.Err(); err != nil {
+		return fmt.Errorf("error iterating MySQL rows: %w", err)
+	}
+
+	return nil
 }
