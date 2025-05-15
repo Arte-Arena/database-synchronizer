@@ -25,5 +25,6 @@ func GetDB() string {
 }
 
 const (
-	MONGODB_TIMEOUT = 20 * time.Second
+	MONGODB_TIMEOUT  = 20 * time.Second
+	COLLECTION_USERS = "users"
 )
