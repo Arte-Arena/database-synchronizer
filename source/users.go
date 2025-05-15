@@ -37,7 +37,7 @@ type MongoDBUsers struct {
 	UpdatedAt time.Time     `json:"updated_at" bson:"updated_at"`
 }
 
-type MYSQLUsers struct {
+type MySQLUsers struct {
 	ID        uint64    `db:"id"`
 	Name      string    `db:"name"`
 	Email     string    `db:"email"`
@@ -45,7 +45,7 @@ type MYSQLUsers struct {
 	UpdatedAt time.Time `db:"updated_at"`
 }
 
-type MYSQLRoleUser struct {
+type MySQLRoleUser struct {
 	UserID uint64 `db:"user_id"`
 	RoleID uint   `db:"role_id"`
 }
@@ -138,7 +138,7 @@ func SyncUsers() error {
 	bulkOperations := []mongo.WriteModel{}
 
 	for rows.Next() {
-		user := MYSQLUsers{}
+		user := MySQLUsers{}
 
 		var createdAtStr, updatedAtStr []byte
 
