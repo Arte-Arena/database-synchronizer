@@ -71,10 +71,11 @@ func SyncLeads() error {
 	}
 	defer mongoClient.Disconnect(ctx)
 
-	collection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_LEADS)
+	tempCollName := database.COLLECTION_LEADS + "_temp"
+	tempCollection := mongoClient.Database(database.GetDB()).Collection(tempCollName)
 
-	if _, err := collection.DeleteMany(ctx, bson.D{}); err != nil {
-		return fmt.Errorf("failed to clear MongoDB leads collection: %w", err)
+	if _, err := tempCollection.DeleteMany(ctx, bson.D{}); err != nil {
+		return fmt.Errorf("failed to clear temporary collection: %w", err)
 	}
 
 	rows, err := mysqlDB.Query("SELECT nome, email, telefone, created_at, updated_at FROM octa_webhook")
@@ -131,7 +132,7 @@ func SyncLeads() error {
 		bulkOperations = append(bulkOperations, insertModel)
 
 		if len(bulkOperations) >= 500 {
-			if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+			if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
 				return fmt.Errorf("failed to execute bulk write: %w", err)
 			}
 			bulkOperations = []mongo.WriteModel{}
@@ -139,13 +140,28 @@ func SyncLeads() error {
 	}
 
 	if len(bulkOperations) > 0 {
-		if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+		if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
 			return fmt.Errorf("failed to execute final bulk write: %w", err)
 		}
 	}
 
 	if err = rows.Err(); err != nil {
 		return fmt.Errorf("error iterating MySQL rows: %w", err)
+	}
+
+	db := mongoClient.Database(database.GetDB())
+	err = db.Collection(database.COLLECTION_LEADS).Drop(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to drop original collection: %w", err)
+	}
+
+	renameCmd := bson.D{
+		{Key: "renameCollection", Value: database.GetDB() + "." + tempCollName},
+		{Key: "to", Value: database.GetDB() + "." + database.COLLECTION_LEADS},
+	}
+	err = mongoClient.Database("admin").RunCommand(ctx, renameCmd).Err()
+	if err != nil {
+		return fmt.Errorf("failed to rename temp collection: %w", err)
 	}
 
 	return nil

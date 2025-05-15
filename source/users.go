@@ -103,10 +103,11 @@ func SyncUsers() error {
 	}
 	defer mongoClient.Disconnect(ctx)
 
-	collection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_USERS)
+	tempCollName := database.COLLECTION_USERS + "_temp"
+	tempCollection := mongoClient.Database(database.GetDB()).Collection(tempCollName)
 
-	if _, err := collection.DeleteMany(ctx, bson.D{}); err != nil {
-		return fmt.Errorf("failed to clear MongoDB users collection: %w", err)
+	if _, err := tempCollection.DeleteMany(ctx, bson.D{}); err != nil {
+		return fmt.Errorf("failed to clear temporary collection: %w", err)
 	}
 
 	roleUserMap := make(map[uint64][]uint)
@@ -195,7 +196,7 @@ func SyncUsers() error {
 		bulkOperations = append(bulkOperations, upsertModel)
 
 		if len(bulkOperations) >= 500 {
-			if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+			if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
 				return fmt.Errorf("failed to execute bulk write: %w", err)
 			}
 			bulkOperations = []mongo.WriteModel{}
@@ -203,13 +204,28 @@ func SyncUsers() error {
 	}
 
 	if len(bulkOperations) > 0 {
-		if _, err := collection.BulkWrite(ctx, bulkOperations); err != nil {
+		if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
 			return fmt.Errorf("failed to execute final bulk write: %w", err)
 		}
 	}
 
 	if err = rows.Err(); err != nil {
 		return fmt.Errorf("error iterating MySQL rows: %w", err)
+	}
+
+	db := mongoClient.Database(database.GetDB())
+	err = db.Collection(database.COLLECTION_USERS).Drop(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to drop original collection: %w", err)
+	}
+
+	renameCmd := bson.D{
+		{Key: "renameCollection", Value: database.GetDB() + "." + tempCollName},
+		{Key: "to", Value: database.GetDB() + "." + database.COLLECTION_USERS},
+	}
+	err = mongoClient.Database("admin").RunCommand(ctx, renameCmd).Err()
+	if err != nil {
+		return fmt.Errorf("failed to rename temp collection: %w", err)
 	}
 
 	return nil
