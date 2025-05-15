@@ -2,9 +2,13 @@ module database_sync
 
 go 1.24.1
 
-require go.mongodb.org/mongo-driver/v2 v2.2.1
+require (
+	github.com/go-sql-driver/mysql v1.9.2
+	go.mongodb.org/mongo-driver/v2 v2.2.1
+)
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/klauspost/compress v1.16.7 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
