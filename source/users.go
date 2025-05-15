@@ -105,6 +105,10 @@ func SyncUsers() error {
 
 	collection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_USERS)
 
+	if _, err := collection.DeleteMany(ctx, bson.D{}); err != nil {
+		return fmt.Errorf("failed to clear MongoDB users collection: %w", err)
+	}
+
 	roleUserMap := make(map[uint64][]uint)
 	roleUserRows, err := mysqlDB.Query("SELECT user_id, role_id FROM role_user")
 	if err != nil {
