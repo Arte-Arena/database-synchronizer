@@ -17,6 +17,7 @@ import (
 
 type MongoDBLeads struct {
 	ID             bson.ObjectID   `json:"id,omitempty" bson:"_id,omitempty"`
+	OldID          string          `json:"old_id" bson:"old_id"`
 	Name           string          `json:"name,omitempty" bson:"name,omitempty"`
 	Nickname       string          `json:"nickname,omitempty" bson:"nickname,omitempty"`
 	Phone          string          `json:"phone,omitempty" bson:"phone,omitempty"`
@@ -36,6 +37,7 @@ type MongoDBLeads struct {
 }
 
 type MySQLLeads struct {
+	ID        string    `db:"id"`
 	Name      *string   `db:"nome"`
 	Email     *string   `db:"email"`
 	Phone     *string   `db:"telefone"`
@@ -71,27 +73,20 @@ func SyncLeads() error {
 	}
 	defer mongoClient.Disconnect(ctx)
 
-	tempCollName := database.COLLECTION_LEADS + "_temp"
-	tempCollection := mongoClient.Database(database.GetDB()).Collection(tempCollName)
+	allLeadsMap := make(map[string]*MySQLLeads, 20000)
 
-	if _, err := tempCollection.DeleteMany(ctx, bson.D{}); err != nil {
-		return fmt.Errorf("failed to clear temporary collection: %w", err)
-	}
-
-	rows, err := mysqlDB.Query("SELECT nome, email, telefone, created_at, updated_at FROM octa_webhook")
+	dataRows, err := mysqlDB.Query("SELECT id, nome, email, telefone, created_at, updated_at FROM octa_webhook WHERE id IS NOT NULL")
 	if err != nil {
-		return fmt.Errorf("failed to query MySQL octa_webhook: %w", err)
+		return fmt.Errorf("failed to query MySQL octa_webhook data: %w", err)
 	}
-	defer rows.Close()
 
-	bulkOperations := []mongo.WriteModel{}
-
-	for rows.Next() {
-		lead := MySQLLeads{}
-
+	for dataRows.Next() {
+		lead := &MySQLLeads{}
 		var createdAtStr, updatedAtStr []byte
+		var id sql.NullString
 
-		err := rows.Scan(
+		err := dataRows.Scan(
+			&id,
 			&lead.Name,
 			&lead.Email,
 			&lead.Phone,
@@ -99,19 +94,129 @@ func SyncLeads() error {
 			&updatedAtStr,
 		)
 		if err != nil {
-			return fmt.Errorf("failed to scan MySQL octa_webhook: %w", err)
+			dataRows.Close()
+			return fmt.Errorf("failed to scan MySQL lead data: %w", err)
 		}
 
+		if !id.Valid || id.String == "" {
+			continue
+		}
+
+		lead.ID = id.String
 		lead.CreatedAt, err = time.Parse("2006-01-02 15:04:05", string(createdAtStr))
 		if err != nil {
+			dataRows.Close()
 			return fmt.Errorf("failed to parse created_at datetime: %w", err)
 		}
 
 		lead.UpdatedAt, err = time.Parse("2006-01-02 15:04:05", string(updatedAtStr))
 		if err != nil {
+			dataRows.Close()
 			return fmt.Errorf("failed to parse updated_at datetime: %w", err)
 		}
 
+		allLeadsMap[lead.ID] = lead
+	}
+	dataRows.Close()
+
+	if err = dataRows.Err(); err != nil {
+		return fmt.Errorf("error iterating MySQL data rows: %w", err)
+	}
+
+	mysqlIDs := make(map[string]bool, len(allLeadsMap))
+	for id := range allLeadsMap {
+		mysqlIDs[id] = true
+	}
+
+	if len(mysqlIDs) == 0 {
+		fmt.Printf("[SYNC_LEADS] Nenhum registro encontrado no MySQL para sincronizar: %s\n",
+			time.Now().Format("2006-01-02 15:04:05"))
+		return nil
+	}
+
+	leadsCollection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_LEADS)
+	mongoIDs := make(map[string]bool, 20000)
+	mongoLeadsData := make(map[string]MongoDBLeads)
+
+	cursor, err := leadsCollection.Find(ctx, bson.D{})
+	if err != nil {
+		return fmt.Errorf("failed to query MongoDB leads: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var lead MongoDBLeads
+		if err := cursor.Decode(&lead); err != nil {
+			return fmt.Errorf("failed to decode MongoDB lead: %w", err)
+		}
+		if lead.OldID != "" {
+			mongoIDs[lead.OldID] = true
+			mongoLeadsData[lead.OldID] = lead
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("error iterating MongoDB cursor: %w", err)
+	}
+
+	idsToDelete := []string{}
+	for mongoID := range mongoIDs {
+		if !mysqlIDs[mongoID] {
+			idsToDelete = append(idsToDelete, mongoID)
+		}
+	}
+
+	if len(idsToDelete) > 0 {
+		deleteFilter := bson.D{{Key: "old_id", Value: bson.D{{Key: "$in", Value: idsToDelete}}}}
+		_, err := leadsCollection.DeleteMany(ctx, deleteFilter)
+		if err != nil {
+			return fmt.Errorf("failed to delete non-existing leads from MongoDB: %w", err)
+		}
+	}
+
+	recordsToUpsert := make([]string, 0)
+
+	for id, mysqlLead := range allLeadsMap {
+		mongoLead, exists := mongoLeadsData[id]
+
+		if !exists {
+			recordsToUpsert = append(recordsToUpsert, id)
+			continue
+		}
+
+		var mysqlName, mysqlPhone string
+		if mysqlLead.Name != nil {
+			mysqlName = *mysqlLead.Name
+		}
+		if mysqlLead.Phone != nil {
+			mysqlPhone = *mysqlLead.Phone
+		}
+
+		if mysqlName != mongoLead.Name ||
+			mysqlPhone != mongoLead.Phone ||
+			!mysqlLead.UpdatedAt.Equal(mongoLead.UpdatedAt) {
+			recordsToUpsert = append(recordsToUpsert, id)
+		}
+	}
+
+	if len(recordsToUpsert) == 0 {
+		return nil
+	}
+
+	totalRecords := len(recordsToUpsert)
+	batchSize := 50
+	if totalRecords > 1000 {
+		batchSize = 200
+	} else if totalRecords > 5000 {
+		batchSize = 500
+	}
+
+	bulkOperations := []mongo.WriteModel{}
+	processedCount := 0
+	bulkWriteCount := 0
+
+	for _, id := range recordsToUpsert {
+		lead := allLeadsMap[id]
 		var name, phone string
 		if lead.Name != nil {
 			name = *lead.Name
@@ -121,6 +226,7 @@ func SyncLeads() error {
 		}
 
 		mongoLead := MongoDBLeads{
+			OldID:     lead.ID,
 			Name:      name,
 			Phone:     phone,
 			Source:    "Octa",
@@ -128,40 +234,33 @@ func SyncLeads() error {
 			UpdatedAt: lead.UpdatedAt,
 		}
 
-		insertModel := mongo.NewInsertOneModel().SetDocument(mongoLead)
-		bulkOperations = append(bulkOperations, insertModel)
+		filter := bson.D{{Key: "old_id", Value: mongoLead.OldID}}
+		update := bson.D{{Key: "$set", Value: mongoLead}}
 
-		if len(bulkOperations) >= 500 {
-			if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
+		upsertModel := mongo.NewUpdateOneModel().
+			SetFilter(filter).
+			SetUpdate(update).
+			SetUpsert(true)
+
+		bulkOperations = append(bulkOperations, upsertModel)
+		processedCount++
+
+		if len(bulkOperations) >= batchSize {
+			_, err := leadsCollection.BulkWrite(ctx, bulkOperations)
+			if err != nil {
 				return fmt.Errorf("failed to execute bulk write: %w", err)
 			}
+			bulkWriteCount++
 			bulkOperations = []mongo.WriteModel{}
 		}
 	}
 
 	if len(bulkOperations) > 0 {
-		if _, err := tempCollection.BulkWrite(ctx, bulkOperations); err != nil {
+		_, err := leadsCollection.BulkWrite(ctx, bulkOperations)
+		if err != nil {
 			return fmt.Errorf("failed to execute final bulk write: %w", err)
 		}
-	}
-
-	if err = rows.Err(); err != nil {
-		return fmt.Errorf("error iterating MySQL rows: %w", err)
-	}
-
-	db := mongoClient.Database(database.GetDB())
-	err = db.Collection(database.COLLECTION_LEADS).Drop(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to drop original collection: %w", err)
-	}
-
-	renameCmd := bson.D{
-		{Key: "renameCollection", Value: database.GetDB() + "." + tempCollName},
-		{Key: "to", Value: database.GetDB() + "." + database.COLLECTION_LEADS},
-	}
-	err = mongoClient.Database("admin").RunCommand(ctx, renameCmd).Err()
-	if err != nil {
-		return fmt.Errorf("failed to rename temp collection: %w", err)
+		bulkWriteCount++
 	}
 
 	return nil
