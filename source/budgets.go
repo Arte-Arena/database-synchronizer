@@ -55,13 +55,11 @@ type MongoDBBudgets struct {
 	Status             string           `json:"status" bson:"status"`
 	PaymentMethod      string           `json:"payment_method" bson:"payment_method"`
 	Billing            MongoDBBilling   `json:"billing" bson:"billing"`
-
-	Trello_uri       string    `json:"trello_uri" bson:"trello_uri"`
-	Notes            string    `json:"notes" bson:"notes"`
-	DeliveryForecast time.Time `json:"delivery_forecast" bson:"delivery_forecast"`
-	TotalValue       float64   `json:"total_value" bson:"total_value"`
-	CreatedAt        time.Time `json:"created_at" bson:"created_at,omitempty"`
-	UpdatedAt        time.Time `json:"updated_at" bson:"updated_at,omitempty"`
+	Trello_uri         string           `json:"trello_uri" bson:"trello_uri"`
+	Notes              string           `json:"notes" bson:"notes"`
+	DeliveryForecast   time.Time        `json:"delivery_forecast" bson:"delivery_forecast"`
+	CreatedAt          time.Time        `json:"created_at" bson:"created_at,omitempty"`
+	UpdatedAt          time.Time        `json:"updated_at" bson:"updated_at,omitempty"`
 }
 
 type MySQLBudgets struct {
