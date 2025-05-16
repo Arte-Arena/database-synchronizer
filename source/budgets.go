@@ -41,8 +41,8 @@ type MongoDBBilling struct {
 type MongoDBBudgets struct {
 	ID                 bson.ObjectID    `json:"id,omitempty" bson:"_id,omitempty"`
 	OldID              uint64           `json:"old_id" bson:"old_id"`
-	Approver           bson.ObjectID    `json:"Approver" bson:"Approver"`
-	Seller             bson.ObjectID    `json:"Seller" bson:"Seller"`
+	Approver           bson.ObjectID    `json:"approver" bson:"approver"`
+	Seller             bson.ObjectID    `json:"seller" bson:"seller"`
 	RelatedLead        bson.ObjectID    `json:"related_lead" bson:"related_lead"`
 	RelatedClient      bson.ObjectID    `json:"related_client" bson:"related_client"`
 	ProductsList       []MongoDBProduct `json:"products_list" bson:"products_list"`
