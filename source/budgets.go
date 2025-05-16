@@ -28,10 +28,21 @@ type MongoDBDiscount struct {
 	Percentage float64 `json:"percentage" bson:"percentage"`
 }
 
+type MongoDBInstallments struct {
+	Date  time.Time `json:"date" bson:"date"`
+	Value float64   `json:"value" bson:"value"`
+}
+
+type MongoDBBilling struct {
+	Type         string                `json:"type" bson:"type"`
+	Installments []MongoDBInstallments `json:"installments" bson:"installments"`
+}
+
 type MongoDBBudgets struct {
 	ID                 bson.ObjectID    `json:"id,omitempty" bson:"_id,omitempty"`
 	OldID              uint64           `json:"old_id" bson:"old_id"`
-	Seller             bson.ObjectID    `json:"seller" bson:"seller"`
+	Approver           bson.ObjectID    `json:"Approver" bson:"Approver"`
+	Seller             bson.ObjectID    `json:"Seller" bson:"Seller"`
 	RelatedLead        bson.ObjectID    `json:"related_lead" bson:"related_lead"`
 	RelatedClient      bson.ObjectID    `json:"related_client" bson:"related_client"`
 	ProductsList       []MongoDBProduct `json:"products_list" bson:"products_list"`
@@ -41,10 +52,16 @@ type MongoDBBudgets struct {
 	Discount           MongoDBDiscount  `json:"discount" bson:"discount"`
 	Gifts              []MongoDBProduct `json:"gifts" bson:"gifts"`
 	ProductionDeadline uint             `json:"production_deadline" bson:"production_deadline"`
-	DeliveryForecast   time.Time        `json:"delivery_forecast" bson:"delivery_forecast"`
-	TotalValue         float64          `json:"total_value" bson:"total_value"`
-	CreatedAt          time.Time        `json:"created_at" bson:"created_at,omitempty"`
-	UpdatedAt          time.Time        `json:"updated_at" bson:"updated_at,omitempty"`
+	Status             string           `json:"status" bson:"status"`
+	PaymentMethod      string           `json:"payment_method" bson:"payment_method"`
+	Billing            MongoDBBilling   `json:"billing" bson:"billing"`
+
+	Trello_uri       string    `json:"trello_uri" bson:"trello_uri"`
+	Notes            string    `json:"notes" bson:"notes"`
+	DeliveryForecast time.Time `json:"delivery_forecast" bson:"delivery_forecast"`
+	TotalValue       float64   `json:"total_value" bson:"total_value"`
+	CreatedAt        time.Time `json:"created_at" bson:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at" bson:"updated_at,omitempty"`
 }
 
 type MySQLBudgets struct {
