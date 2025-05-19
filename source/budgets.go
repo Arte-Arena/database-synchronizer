@@ -112,13 +112,10 @@ func SyncBudgets() error {
 
 	for dataRows.Next() {
 		budget := &MySQLBudgets{}
-		var createdAtStr, updatedAtStr []byte
 		var id sql.NullInt64
 
 		err := dataRows.Scan(
 			&id,
-			&createdAtStr,
-			&updatedAtStr,
 		)
 		if err != nil {
 			dataRows.Close()
