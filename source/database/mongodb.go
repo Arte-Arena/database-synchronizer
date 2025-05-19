@@ -29,4 +29,5 @@ const (
 	COLLECTION_USERS   = "users"
 	COLLECTION_LEADS   = "leads"
 	COLLECTION_BUDGETS = "budgets"
+	COLLECTION_ORDERS  = "orders"
 )
