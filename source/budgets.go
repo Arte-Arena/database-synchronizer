@@ -67,8 +67,8 @@ type MongoDBBudgets struct {
 	//Trello_uri         string           `json:"trello_uri" bson:"trello_uri"`
 	//Notes              string           `json:"notes" bson:"notes"`
 	//DeliveryForecast   time.Time        `json:"delivery_forecast" bson:"delivery_forecast"`
-	CreatedAt time.Time `json:"created_at" bson:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at" bson:"updated_at,omitempty"`
+	//CreatedAt time.Time `json:"created_at" bson:"created_at,omitempty"`
+	//UpdatedAt time.Time `json:"updated_at" bson:"updated_at,omitempty"`
 }
 
 type MySQLBudgets struct {
@@ -107,7 +107,7 @@ func SyncBudgets() error {
 
 	allBudgetsMap := make(map[uint64]*MySQLBudgets)
 
-	dataRows, err := mysqlDB.Query("SELECT id, created_at, updated_at FROM orcamentos WHERE id IS NOT NULL")
+	dataRows, err := mysqlDB.Query("SELECT id FROM orcamentos WHERE id IS NOT NULL")
 	if err != nil {
 		return fmt.Errorf("failed to query MySQL orcamentos data: %w", err)
 	}
@@ -205,17 +205,15 @@ func SyncBudgets() error {
 
 	recordsToUpsert := make([]uint64, 0)
 
-	for id, mysqlBudget := range allBudgetsMap {
-		mongoBudget, exists := mongoBudgetsData[id]
+	for id := range allBudgetsMap {
+		_, exists := mongoBudgetsData[id]
 
 		if !exists {
 			recordsToUpsert = append(recordsToUpsert, id)
 			continue
 		}
 
-		if !mysqlBudget.UpdatedAt.Equal(mongoBudget.UpdatedAt) {
-			recordsToUpsert = append(recordsToUpsert, id)
-		}
+		recordsToUpsert = append(recordsToUpsert, id)
 	}
 
 	if len(recordsToUpsert) == 0 {
@@ -235,12 +233,8 @@ func SyncBudgets() error {
 	bulkWriteCount := 0
 
 	for _, id := range recordsToUpsert {
-		budget := allBudgetsMap[id]
-
 		mongoBudget := MongoDBBudgets{
-			OldID:     id,
-			CreatedAt: budget.CreatedAt,
-			UpdatedAt: budget.UpdatedAt,
+			OldID: id,
 		}
 
 		filter := bson.D{{Key: "old_id", Value: mongoBudget.OldID}}
