@@ -194,10 +194,7 @@ func SyncBudgets() error {
 
 		if !exists {
 			recordsToUpsert = append(recordsToUpsert, id)
-			continue
 		}
-
-		recordsToUpsert = append(recordsToUpsert, id)
 	}
 
 	if len(recordsToUpsert) == 0 {
