@@ -13,7 +13,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		startTime := time.Now()
@@ -47,13 +47,24 @@ func main() {
 		}
 	}()
 
+	go func() {
+		defer wg.Done()
+		startTime := time.Now()
+		if err := SyncOrders(); err != nil {
+			log.Printf("Error synchronizing orders: %v", err)
+		} else {
+			elapsed := time.Since(startTime)
+			fmt.Printf("Initial orders synchronization completed successfully (elapsed time: %s)\n", elapsed)
+		}
+	}()
+
 	wg.Wait()
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		wg.Add(3)
+		wg.Add(4)
 
 		go func() {
 			defer wg.Done()
@@ -88,6 +99,18 @@ func main() {
 			} else {
 				elapsed := time.Since(startTime)
 				fmt.Printf("Budgets synchronization completed successfully (elapsed time: %s)\n", elapsed)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			fmt.Println("Running scheduled orders synchronization...")
+			startTime := time.Now()
+			if err := SyncOrders(); err != nil {
+				log.Printf("Error synchronizing orders: %v", err)
+			} else {
+				elapsed := time.Since(startTime)
+				fmt.Printf("Orders synchronization completed successfully (elapsed time: %s)\n", elapsed)
 			}
 		}()
 
