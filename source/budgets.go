@@ -72,9 +72,7 @@ type MongoDBBudgets struct {
 }
 
 type MySQLBudgets struct {
-	ID        string    `db:"id"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID string `db:"id"`
 }
 
 func SyncBudgets() error {
@@ -132,17 +130,6 @@ func SyncBudgets() error {
 		}
 
 		budget.ID = fmt.Sprintf("%d", id.Int64)
-		budget.CreatedAt, err = time.Parse("2006-01-02 15:04:05", string(createdAtStr))
-		if err != nil {
-			dataRows.Close()
-			return fmt.Errorf("failed to parse created_at datetime: %w", err)
-		}
-
-		budget.UpdatedAt, err = time.Parse("2006-01-02 15:04:05", string(updatedAtStr))
-		if err != nil {
-			dataRows.Close()
-			return fmt.Errorf("failed to parse updated_at datetime: %w", err)
-		}
 
 		allBudgetsMap[uint64(id.Int64)] = budget
 	}
