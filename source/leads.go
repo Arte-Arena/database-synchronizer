@@ -17,7 +17,6 @@ import (
 
 type MongoDBLeads struct {
 	ID             bson.ObjectID   `json:"id,omitempty" bson:"_id,omitempty"`
-	OldID          string          `json:"old_id" bson:"old_id"`
 	Name           string          `json:"name,omitempty" bson:"name,omitempty"`
 	Nickname       string          `json:"nickname,omitempty" bson:"nickname,omitempty"`
 	Phone          string          `json:"phone,omitempty" bson:"phone,omitempty"`
@@ -149,9 +148,9 @@ func SyncLeads() error {
 		if err := cursor.Decode(&lead); err != nil {
 			return fmt.Errorf("failed to decode MongoDB lead: %w", err)
 		}
-		if lead.OldID != "" {
-			mongoIDs[lead.OldID] = true
-			mongoLeadsData[lead.OldID] = lead
+		if lead.UniqueID != "" {
+			mongoIDs[lead.UniqueID] = true
+			mongoLeadsData[lead.UniqueID] = lead
 		}
 	}
 
@@ -226,7 +225,7 @@ func SyncLeads() error {
 		}
 
 		mongoLead := MongoDBLeads{
-			OldID:     lead.ID,
+			UniqueID:  lead.ID,
 			Name:      name,
 			Phone:     phone,
 			Source:    "Octa",
@@ -234,7 +233,7 @@ func SyncLeads() error {
 			UpdatedAt: lead.UpdatedAt,
 		}
 
-		filter := bson.D{{Key: "old_id", Value: mongoLead.OldID}}
+		filter := bson.D{{Key: "unique_id", Value: mongoLead.UniqueID}}
 		update := bson.D{{Key: "$set", Value: mongoLead}}
 
 		upsertModel := mongo.NewUpdateOneModel().
