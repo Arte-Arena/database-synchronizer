@@ -26,7 +26,7 @@ type MongoDBLeads struct {
 	UpdatedAt      time.Time       `json:"updated_at" bson:"updated_at,omitempty"`
 	Status         string          `json:"status,omitempty" bson:"status,omitempty"`
 	Source         string          `json:"source,omitempty" bson:"source,omitempty"`
-	UniqueID       string          `json:"unique_id,omitempty" bson:"unique_id,omitempty"`
+	PlatformId     string          `json:"platform_id,omitempty" bson:"platform_id,omitempty"`
 	RelatedBudgets []bson.ObjectID `json:"related_budgets,omitempty" bson:"related_budgets,omitempty"`
 	RelatedOrders  []bson.ObjectID `json:"related_orders,omitempty" bson:"related_orders,omitempty"`
 	RelatedClient  bson.ObjectID   `json:"related_client,omitempty" bson:"related_client,omitempty"`
@@ -148,9 +148,9 @@ func SyncLeads() error {
 		if err := cursor.Decode(&lead); err != nil {
 			return fmt.Errorf("failed to decode MongoDB lead: %w", err)
 		}
-		if lead.UniqueID != "" {
-			mongoIDs[lead.UniqueID] = true
-			mongoLeadsData[lead.UniqueID] = lead
+		if lead.PlatformId != "" {
+			mongoIDs[lead.PlatformId] = true
+			mongoLeadsData[lead.PlatformId] = lead
 		}
 	}
 
@@ -225,15 +225,15 @@ func SyncLeads() error {
 		}
 
 		mongoLead := MongoDBLeads{
-			UniqueID:  lead.ID,
-			Name:      name,
-			Phone:     phone,
-			Source:    "Octa",
-			CreatedAt: lead.CreatedAt,
-			UpdatedAt: lead.UpdatedAt,
+			PlatformId: lead.ID,
+			Name:       name,
+			Phone:      phone,
+			Source:     "Octa",
+			CreatedAt:  lead.CreatedAt,
+			UpdatedAt:  lead.UpdatedAt,
 		}
 
-		filter := bson.D{{Key: "unique_id", Value: mongoLead.UniqueID}}
+		filter := bson.D{{Key: "platform_id", Value: mongoLead.PlatformId}}
 		update := bson.D{{Key: "$set", Value: mongoLead}}
 
 		upsertModel := mongo.NewUpdateOneModel().
