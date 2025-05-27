@@ -1,0 +1,22 @@
+# Build stage
+FROM golang:1.24-alpine AS builder
+RUN apk add --no-cache git
+WORKDIR /app
+COPY ./source/go.mod ./
+COPY ./source/go.sum ./
+RUN go mod download
+COPY ./source/ .
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+
+# Runtime stage
+FROM alpine:latest
+RUN apk add --no-cache bash
+WORKDIR /app
+COPY --from=builder /app/main .
+COPY ./source/init-container.sh ./init-container.sh
+RUN chmod +x ./init-container.sh
+RUN touch .env
+RUN chmod u+w .env
+# Definir ENV como production
+EXPOSE 8080
+CMD ["./init-container.sh"]
