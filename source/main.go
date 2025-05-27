@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database_sync/source/utils"
+	"database_sync/utils"
 	"fmt"
 	"log"
 	"sync"
