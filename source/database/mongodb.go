@@ -1,7 +1,7 @@
 package database
 
 import (
-	"database_sync/source/utils"
+	"database_sync/utils"
 	"os"
 	"time"
 )

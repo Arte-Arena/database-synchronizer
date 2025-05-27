@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
-	"database_sync/source/database"
-	"database_sync/source/utils"
+	"database_sync/database"
+	"database_sync/utils"
 	"fmt"
 	"os"
 
