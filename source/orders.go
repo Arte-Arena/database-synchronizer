@@ -83,6 +83,8 @@ type MongoDBOrders struct {
 	ProductsListLegacy string        `json:"products_list_legacy,omitempty" bson:"products_list_legacy,omitempty"`
 	RelatedBudget      bson.ObjectID `json:"related_budget,omitempty" bson:"related_budget,omitempty"`
 	ExpectedDate       time.Time     `json:"expected_date,omitempty" bson:"expected_date,omitempty"`
+	CustomProperties   any           `json:"custom_properties,omitempty" bson:"custom_properties,omitempty"`
+	Tiny               TinyOrder     `json:"tiny,omitempty" bson:"tiny,omitempty"`
 	Notes              string        `json:"notes,omitempty" bson:"notes,omitempty"`
 	CreatedAt          time.Time     `json:"created_at" bson:"created_at"`
 	UpdatedAt          time.Time     `json:"updated_at" bson:"updated_at"`
