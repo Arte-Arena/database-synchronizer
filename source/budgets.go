@@ -43,6 +43,11 @@ type MongoDBBilling struct {
 	Installments []MongoDBInstallments `json:"installments" bson:"installments"`
 }
 
+type MongoDBAddress struct {
+	CEP     string `json:"cep" bson:"cep"`
+	Details string `json:"details" bson:"details"`
+}
+
 type MongoDBBudgets struct {
 	ID                 bson.ObjectID    `json:"id,omitempty" bson:"_id,omitempty"`
 	OldID              uint64           `json:"old_id" bson:"old_id"`
@@ -51,7 +56,7 @@ type MongoDBBudgets struct {
 	RelatedLead        bson.ObjectID    `json:"related_lead" bson:"related_lead"`
 	RelatedClient      bson.ObjectID    `json:"related_client" bson:"related_client"`
 	OldProductsList    string           `json:"old_products_list" bson:"old_products_list"`
-	Cep                string           `json:"cep" bson:"cep"`
+	Address            MongoDBAddress   `json:"address" bson:"address"`
 	Delivery           MongoDBDelivery  `json:"delivery" bson:"delivery"`
 	EarlyMode          MongoDBEarlyMode `json:"early_mode" bson:"early_mode"`
 	Discount           MongoDBDiscount  `json:"discount" bson:"discount"`
@@ -82,8 +87,8 @@ type MySQLBudgets struct {
 	CreatedAt          time.Time       `db:"created_at"`
 	UpdatedAt          sql.NullTime    `db:"updated_at"`
 	Antecipado         int             `db:"antecipado"`
-	DataAntecipacao    sql.NullTime    `db:"data_antecipacao"`
-	TaxaAntecipacao    sql.NullFloat64 `db:"taxa_antepicacao"`
+	DataAntecipacao    sql.NullTime    `db:"data_antecipa"`
+	TaxaAntecipacao    sql.NullFloat64 `db:"taxa_antecipa"`
 	Descontado         int             `db:"descontado"`
 	TipoDesconto       sql.NullString  `db:"tipo_desconto"`
 	ValorDesconto      sql.NullFloat64 `db:"valor_desconto"`
