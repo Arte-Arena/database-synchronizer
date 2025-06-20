@@ -46,7 +46,7 @@ type MongoDBBilling struct {
 type MongoDBBudgets struct {
 	ID                 bson.ObjectID    `json:"id,omitempty" bson:"_id,omitempty"`
 	OldID              uint64           `json:"old_id" bson:"old_id"`
-	Approver           bson.ObjectID    `json:"approver" bson:"approver"`
+	CreatedBy          bson.ObjectID    `json:"created_by" bson:"created_by"`
 	Seller             bson.ObjectID    `json:"seller" bson:"seller"`
 	RelatedLead        bson.ObjectID    `json:"related_lead" bson:"related_lead"`
 	RelatedClient      bson.ObjectID    `json:"related_client" bson:"related_client"`
@@ -68,7 +68,50 @@ type MongoDBBudgets struct {
 }
 
 type MySQLBudgets struct {
-	ID string `db:"id"`
+	ID                 uint64          `db:"id"`
+	UserID             sql.NullInt64   `db:"user_id"`
+	ClienteOctaNumber  sql.NullString  `db:"cliente_octa_number"`
+	NomeCliente        sql.NullString  `db:"nome_cliente"`
+	ListaProdutos      sql.NullString  `db:"lista_produtos"`
+	TextoOrcamento     sql.NullString  `db:"texto_orcamento"`
+	EnderecoCep        sql.NullString  `db:"endereco_cep"`
+	Endereco           sql.NullString  `db:"endereco"`
+	OpcaoEntrega       sql.NullString  `db:"opcao_entrega"`
+	PrazoOpcaoEntrega  int             `db:"prazo_opcao_entrega"`
+	PrecoOpcaoEntrega  sql.NullFloat64 `db:"preco_opcao_entrega"`
+	CreatedAt          time.Time       `db:"created_at"`
+	UpdatedAt          sql.NullTime    `db:"updated_at"`
+	Antecipado         int             `db:"antecipado"`
+	DataAntecipacao    sql.NullTime    `db:"data_antecipacao"`
+	TaxaAntecipacao    sql.NullFloat64 `db:"taxa_antepicacao"`
+	Descontado         int             `db:"descontado"`
+	TipoDesconto       sql.NullString  `db:"tipo_desconto"`
+	ValorDesconto      sql.NullFloat64 `db:"valor_desconto"`
+	PercentualDesconto sql.NullFloat64 `db:"percentual_desconto"`
+	TotalOrcamento     sql.NullFloat64 `db:"total_orcamento"`
+	Brinde             int             `db:"brinde"`
+	ProdutosBrinde     sql.NullString  `db:"produtos_brinde"`
+	PrazoProducao      sql.NullInt64   `db:"prazo_producao"`
+	PrevEntrega        sql.NullTime    `db:"prev_entrega"`
+}
+
+type MySQLBudgetsStatus struct {
+	ID                uint64          `db:"id"`
+	UserID            sql.NullInt64   `db:"user_id"`
+	OrcamentoID       uint64          `db:"orcamento_id"`
+	Status            sql.NullString  `db:"status"`
+	FormaPagamento    sql.NullString  `db:"forma_pagamento"`
+	TipoFaturamento   sql.NullString  `db:"tipo_faturamento"`
+	DataFaturamento   sql.NullTime    `db:"data_faturamento"`
+	QtdParcelas       sql.NullInt64   `db:"qtd_parcelas"`
+	LinkTrello        sql.NullString  `db:"link_trello"`
+	DataEntrega       sql.NullTime    `db:"data_entrega"`
+	Comentarios       sql.NullString  `db:"comentarios"`
+	DataFaturamento2  sql.NullTime    `db:"data_faturamento_2"`
+	DataFaturamento3  sql.NullTime    `db:"data_faturamento_3"`
+	ValorFaturamento  sql.NullFloat64 `db:"valor_faturamento"`
+	ValorFaturamento2 sql.NullFloat64 `db:"valor_faturamento_2"`
+	ValorFaturamento3 sql.NullFloat64 `db:"valor_faturamento_3"`
 }
 
 func SyncBudgets() error {
@@ -122,7 +165,7 @@ func SyncBudgets() error {
 			continue
 		}
 
-		budget.ID = fmt.Sprintf("%d", id.Int64)
+		budget.ID = uint64(id.Int64)
 
 		allBudgetsMap[uint64(id.Int64)] = budget
 	}
