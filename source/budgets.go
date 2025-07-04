@@ -62,7 +62,7 @@ type MongoDBBudgets struct {
 	Discount           MongoDBDiscount  `json:"discount" bson:"discount"`
 	OldGifts           string           `json:"old_gifts" bson:"old_gifts"`
 	ProductionDeadline uint             `json:"production_deadline" bson:"production_deadline"`
-	Status             string           `json:"status" bson:"status"`
+	Approved           bool             `json:"approved" bson:"approved"`
 	PaymentMethod      string           `json:"payment_method" bson:"payment_method"`
 	Billing            MongoDBBilling   `json:"billing" bson:"billing"`
 	Trello_uri         string           `json:"trello_uri" bson:"trello_uri"`
@@ -389,9 +389,11 @@ func SyncBudgets() error {
 		}
 
 		if hasStatus {
-			if budgetStatus.Status.Valid {
-				mongoBudget = append(mongoBudget, bson.E{Key: "status", Value: budgetStatus.Status.String})
+			approved := false
+			if budgetStatus.Status.Valid && strings.EqualFold(budgetStatus.Status.String, "aprovado") {
+				approved = true
 			}
+			mongoBudget = append(mongoBudget, bson.E{Key: "approved", Value: approved})
 			if budgetStatus.FormaPagamento.Valid {
 				mongoBudget = append(mongoBudget, bson.E{Key: "payment_method", Value: budgetStatus.FormaPagamento.String})
 			}
@@ -420,6 +422,8 @@ func SyncBudgets() error {
 			if budgetStatus.Comentarios.Valid {
 				mongoBudget = append(mongoBudget, bson.E{Key: "notes", Value: budgetStatus.Comentarios.String})
 			}
+		} else {
+			mongoBudget = append(mongoBudget, bson.E{Key: "approved", Value: false})
 		}
 
 		filter := bson.D{{Key: "old_id", Value: id}}
