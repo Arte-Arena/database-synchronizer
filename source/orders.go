@@ -86,6 +86,7 @@ type MongoDBOrders struct {
 	CustomProperties   any           `json:"custom_properties,omitempty" bson:"custom_properties,omitempty"`
 	Tiny               TinyOrder     `json:"tiny,omitempty" bson:"tiny,omitempty"`
 	Notes              string        `json:"notes,omitempty" bson:"notes,omitempty"`
+	PaymentDate        *time.Time    `json:"payment_date,omitempty" bson:"payment_date,omitempty"`
 	CreatedAt          time.Time     `json:"created_at" bson:"created_at"`
 	UpdatedAt          time.Time     `json:"updated_at" bson:"updated_at"`
 }
@@ -113,6 +114,7 @@ type MySQLOrders struct {
 	VendedorID         sql.NullInt64  `db:"vendedor_id"`
 	DesignerID         sql.NullInt64  `db:"designer_id"`
 	CodigoRastreamento sql.NullString `db:"codigo_rastreamento"`
+	DataPagamento      sql.NullString `db:"data_pagamento"`
 }
 
 var statusIDToOrderStatus = map[uint64]OrderStatus{
@@ -228,7 +230,7 @@ func SyncOrders() error {
 
 	allOrdersMap := make(map[uint64]*MySQLOrders)
 
-	dataRows, err := mysqlDB.Query(`SELECT id, user_id, numero_pedido, prazo_arte_final, prazo_confeccao, lista_produtos, observacoes, rolo, pedido_status_id, pedido_tipo_id, estagio, url_trello, situacao, prioridade, orcamento_id, created_at, updated_at, tiny_pedido_id, data_prevista, vendedor_id, designer_id, codigo_rastreamento FROM pedidos_arte_final WHERE id IS NOT NULL`)
+	dataRows, err := mysqlDB.Query(`SELECT id, user_id, numero_pedido, prazo_arte_final, prazo_confeccao, lista_produtos, observacoes, rolo, pedido_status_id, pedido_tipo_id, estagio, url_trello, situacao, prioridade, orcamento_id, created_at, updated_at, tiny_pedido_id, data_prevista, vendedor_id, designer_id, codigo_rastreamento, data_pagamento FROM pedidos_arte_final WHERE id IS NOT NULL`)
 	if err != nil {
 		return fmt.Errorf("failed to query MySQL orders data: %w", err)
 	}
@@ -258,6 +260,7 @@ func SyncOrders() error {
 			&order.VendedorID,
 			&order.DesignerID,
 			&order.CodigoRastreamento,
+			&order.DataPagamento,
 		)
 		if err != nil {
 			dataRows.Close()
@@ -420,6 +423,13 @@ func SyncOrders() error {
 
 		if order.Observacoes.Valid {
 			mongoOrder = append(mongoOrder, bson.E{Key: "notes", Value: order.Observacoes.String})
+		}
+
+		if order.DataPagamento.Valid {
+			t, err := time.Parse("2006-01-02 15:04:05", order.DataPagamento.String)
+			if err == nil {
+				mongoOrder = append(mongoOrder, bson.E{Key: "payment_date", Value: t})
+			}
 		}
 
 		if order.TinyPedidoID.Valid {
