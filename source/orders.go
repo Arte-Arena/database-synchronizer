@@ -415,7 +415,7 @@ func SyncOrders() error {
 		}
 
 		if order.DataPrevista.Valid {
-			t, err := time.Parse("2006-01-02 15:04:05", order.DataPrevista.String)
+			t, err := time.Parse("2006-01-02", order.DataPrevista.String)
 			if err == nil {
 				mongoOrder = append(mongoOrder, bson.E{Key: "expected_date", Value: t})
 			}
@@ -426,7 +426,7 @@ func SyncOrders() error {
 		}
 
 		if order.DataPagamento.Valid {
-			t, err := time.Parse("2006-01-02 15:04:05", order.DataPagamento.String)
+			t, err := time.Parse("2006-01-02", order.DataPagamento.String)
 			if err == nil {
 				mongoOrder = append(mongoOrder, bson.E{Key: "payment_date", Value: t})
 			}
