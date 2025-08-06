@@ -13,13 +13,14 @@ const (
 	ENV         = "ENV"
 	MONGODB_URI = "MONGODB_URI"
 	MYSQL_URI   = "MYSQL_URI"
+	TINY_TOKEN  = "TINY_TOKEN"
 
 	ENV_DEVELOPMENT = "development"
 	ENV_HOMOLOG     = "homolog"
 	ENV_RELEASE     = "production"
 )
 
-var allowedKeys = []string{ENV, MONGODB_URI, MYSQL_URI}
+var allowedKeys = []string{ENV, MONGODB_URI, MYSQL_URI, TINY_TOKEN}
 
 var allowedEnvValues = []string{ENV_DEVELOPMENT, ENV_HOMOLOG, ENV_RELEASE}
 

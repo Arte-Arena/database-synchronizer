@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"database_sync/database"
 	"database_sync/utils"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -69,6 +72,12 @@ type TinyOrder struct {
 	Number string `json:"number,omitempty" bson:"number,omitempty"`
 }
 
+type Tracking struct {
+	Service string `json:"service,omitempty" bson:"service,omitempty"`
+	Url     string `json:"url,omitempty" bson:"url,omitempty"`
+	Code    string `json:"code,omitempty" bson:"code,omitempty"`
+}
+
 type MongoDBOrders struct {
 	ID                 bson.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
 	OldID              uint64        `json:"old_id" bson:"old_id"`
@@ -89,6 +98,7 @@ type MongoDBOrders struct {
 	PaymentDate        *time.Time    `json:"payment_date,omitempty" bson:"payment_date,omitempty"`
 	CreatedAt          time.Time     `json:"created_at" bson:"created_at"`
 	UpdatedAt          time.Time     `json:"updated_at" bson:"updated_at"`
+	Tracking           Tracking      `json:"tracking" bson:"tracking"`
 }
 
 type MySQLOrders struct {
@@ -480,6 +490,156 @@ func SyncOrders() error {
 	if len(bulkOperations) > 0 {
 		if _, err := ordersCollection.BulkWrite(ctx, bulkOperations); err != nil {
 			return fmt.Errorf("failed to execute final bulk write: %w", err)
+		}
+	}
+
+	return nil
+}
+
+type TinyAPIResponse struct {
+	Retorno struct {
+		StatusProcessamento interface{} `json:"status_processamento"`
+		Status              string      `json:"status"`
+		Pedido              struct {
+			FormaFrete         string `json:"forma_frete"`
+			CodigoRastreamento string `json:"codigo_rastreamento"`
+			URLRastreamento    string `json:"url_rastreamento"`
+		} `json:"pedido"`
+	} `json:"retorno"`
+}
+
+func SyncOrdersTracking() error {
+	ctx, cancel := context.WithTimeout(context.Background(), database.MONGODB_TIMEOUT)
+	defer cancel()
+
+	mongoURI := os.Getenv(utils.MONGODB_URI)
+	opts := options.Client().ApplyURI(mongoURI)
+	mongoClient, err := mongo.Connect(opts)
+	if err != nil {
+		return fmt.Errorf("failed to connect to MongoDB: %w", err)
+	}
+	defer mongoClient.Disconnect(ctx)
+
+	ordersCollection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_ORDERS)
+
+	fiveMonthsAgo := time.Now().AddDate(0, -2, 0)
+
+	filter := bson.D{
+		{Key: "created_at", Value: bson.D{{Key: "$gte", Value: fiveMonthsAgo}}},
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "tracking", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "tracking.url", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "tracking.code", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "tracking.service", Value: bson.D{{Key: "$exists", Value: false}}}},
+		}},
+		{Key: "tiny.id", Value: bson.D{{Key: "$exists", Value: true}, {Key: "$ne", Value: ""}}},
+	}
+
+	cursor, err := ordersCollection.Find(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("failed to query MongoDB orders: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Collect all orders first, then close the cursor
+	var ordersToProcess []MongoDBOrders
+	for cursor.Next(ctx) {
+		var order MongoDBOrders
+		if err := cursor.Decode(&order); err != nil {
+			return fmt.Errorf("failed to decode MongoDB order: %w", err)
+		}
+
+		// Only include orders with valid Tiny ID
+		if order.Tiny.ID != "" {
+			ordersToProcess = append(ordersToProcess, order)
+		}
+	}
+
+	if err := cursor.Err(); err != nil {
+		return fmt.Errorf("error iterating MongoDB cursor: %w", err)
+	}
+
+	// Close cursor and context early
+	cursor.Close(ctx)
+	cancel()
+
+	// Now process the orders without keeping the connection active
+	tinyToken := os.Getenv("TINY_TOKEN")
+	client := &http.Client{}
+
+	for _, order := range ordersToProcess {
+		time.Sleep(20 * time.Second)
+
+		url := fmt.Sprintf("https://api.tiny.com.br/api2/pedido.obter.php?token=%s&formato=json&id=%s", tinyToken, order.Tiny.ID)
+
+		resp, err := client.Get(url)
+		if err != nil {
+			fmt.Printf("Failed to fetch tracking info for order %s (tiny_id: %s): %v\n", order.ID.Hex(), order.Tiny.ID, err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			fmt.Printf("Failed to read response body for order %s (tiny_id: %s): %v\n", order.ID.Hex(), order.Tiny.ID, err)
+			continue
+		}
+
+		var tinyResponse TinyAPIResponse
+		if err := json.Unmarshal(body, &tinyResponse); err != nil {
+			fmt.Printf("Failed to parse JSON response for order %s (tiny_id: %s): %v\n", order.ID.Hex(), order.Tiny.ID, err)
+			fmt.Printf("Raw JSON response: %s\n", string(body))
+			continue
+		}
+
+		fmt.Printf("Debug - Order %s (tiny_id: %s):\n", order.ID.Hex(), order.Tiny.ID)
+		fmt.Printf("  Status: %s\n", tinyResponse.Retorno.Status)
+		fmt.Printf("  StatusProcessamento: %v (type: %T)\n", tinyResponse.Retorno.StatusProcessamento, tinyResponse.Retorno.StatusProcessamento)
+		fmt.Printf("  FormaFrete: %s\n", tinyResponse.Retorno.Pedido.FormaFrete)
+		fmt.Printf("  CodigoRastreamento: %s\n", tinyResponse.Retorno.Pedido.CodigoRastreamento)
+		fmt.Printf("  URLRastreamento: %s\n", tinyResponse.Retorno.Pedido.URLRastreamento)
+
+		if tinyResponse.Retorno.Status != "OK" {
+			fmt.Printf("Tiny API returned error for order %s (tiny_id: %s): %s\n", order.ID.Hex(), order.Tiny.ID, tinyResponse.Retorno.Status)
+			continue
+		}
+
+		pedido := tinyResponse.Retorno.Pedido
+
+		if pedido.CodigoRastreamento != "" && pedido.URLRastreamento != "" {
+			tracking := Tracking{
+				Service: pedido.FormaFrete,
+				Url:     pedido.URLRastreamento,
+				Code:    pedido.CodigoRastreamento,
+			}
+
+			// Create new context for update operation
+			updateCtx, updateCancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+			// Reconnect to MongoDB for the update
+			mongoClient, err := mongo.Connect(options.Client().ApplyURI(os.Getenv(utils.MONGODB_URI)))
+			if err != nil {
+				updateCancel()
+				fmt.Printf("Failed to reconnect to MongoDB for order %s: %v\n", order.ID.Hex(), err)
+				continue
+			}
+
+			ordersCollection := mongoClient.Database(database.GetDB()).Collection(database.COLLECTION_ORDERS)
+
+			updateFilter := bson.D{{Key: "_id", Value: order.ID}}
+			update := bson.D{{Key: "$set", Value: bson.D{{Key: "tracking", Value: tracking}}}}
+
+			_, err = ordersCollection.UpdateOne(updateCtx, updateFilter, update)
+
+			mongoClient.Disconnect(updateCtx)
+			updateCancel()
+
+			if err != nil {
+				fmt.Printf("Failed to update tracking for order %s: %v\n", order.ID.Hex(), err)
+				continue
+			}
+
+			fmt.Printf("Updated tracking for order %s (tiny_id: %s)\n", order.ID.Hex(), order.Tiny.ID)
 		}
 	}
 
