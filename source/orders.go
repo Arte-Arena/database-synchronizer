@@ -528,11 +528,17 @@ func SyncOrdersTracking() error {
 		{Key: "created_at", Value: bson.D{{Key: "$gte", Value: fiveMonthsAgo}}},
 		{Key: "$or", Value: bson.A{
 			bson.D{{Key: "tracking", Value: bson.D{{Key: "$exists", Value: false}}}},
-			bson.D{{Key: "tracking.url", Value: bson.D{{Key: "$exists", Value: false}}}},
-			bson.D{{Key: "tracking.code", Value: bson.D{{Key: "$exists", Value: false}}}},
 			bson.D{{Key: "tracking.service", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{
+				{Key: "tracking.service", Value: bson.D{{Key: "$ne", Value: "Retirar Pessoalmente"}}},
+				{Key: "$or", Value: bson.A{
+					bson.D{{Key: "tracking.url", Value: bson.D{{Key: "$exists", Value: false}}}},
+					bson.D{{Key: "tracking.url", Value: ""}},
+					bson.D{{Key: "tracking.code", Value: bson.D{{Key: "$exists", Value: false}}}},
+					bson.D{{Key: "tracking.code", Value: ""}},
+				}},
+			},
 		}},
-		{Key: "tracking.service", Value: bson.D{{Key: "$ne", Value: "Retirar Pessoalmente"}}},
 		{Key: "tiny.id", Value: bson.D{{Key: "$exists", Value: true}, {Key: "$ne", Value: ""}}},
 	}
 
