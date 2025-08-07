@@ -532,6 +532,7 @@ func SyncOrdersTracking() error {
 			bson.D{{Key: "tracking.code", Value: bson.D{{Key: "$exists", Value: false}}}},
 			bson.D{{Key: "tracking.service", Value: bson.D{{Key: "$exists", Value: false}}}},
 		}},
+		{Key: "tracking.service", Value: bson.D{{Key: "$ne", Value: "Retirar Pessoalmente"}}},
 		{Key: "tiny.id", Value: bson.D{{Key: "$exists", Value: true}, {Key: "$ne", Value: ""}}},
 	}
 
@@ -541,7 +542,6 @@ func SyncOrdersTracking() error {
 	}
 	defer cursor.Close(ctx)
 
-	// Collect all orders first, then close the cursor
 	var ordersToProcess []MongoDBOrders
 	for cursor.Next(ctx) {
 		var order MongoDBOrders
@@ -549,7 +549,6 @@ func SyncOrdersTracking() error {
 			return fmt.Errorf("failed to decode MongoDB order: %w", err)
 		}
 
-		// Only include orders with valid Tiny ID
 		if order.Tiny.ID != "" {
 			ordersToProcess = append(ordersToProcess, order)
 		}
@@ -559,11 +558,9 @@ func SyncOrdersTracking() error {
 		return fmt.Errorf("error iterating MongoDB cursor: %w", err)
 	}
 
-	// Close cursor and context early
 	cursor.Close(ctx)
 	cancel()
 
-	// Now process the orders without keeping the connection active
 	tinyToken := os.Getenv("TINY_TOKEN")
 	client := &http.Client{}
 
@@ -592,13 +589,6 @@ func SyncOrdersTracking() error {
 			continue
 		}
 
-		fmt.Printf("Debug - Order %s (tiny_id: %s):\n", order.ID.Hex(), order.Tiny.ID)
-		fmt.Printf("  Status: %s\n", tinyResponse.Retorno.Status)
-		fmt.Printf("  StatusProcessamento: %v (type: %T)\n", tinyResponse.Retorno.StatusProcessamento, tinyResponse.Retorno.StatusProcessamento)
-		fmt.Printf("  FormaFrete: %s\n", tinyResponse.Retorno.Pedido.FormaFrete)
-		fmt.Printf("  CodigoRastreamento: %s\n", tinyResponse.Retorno.Pedido.CodigoRastreamento)
-		fmt.Printf("  URLRastreamento: %s\n", tinyResponse.Retorno.Pedido.URLRastreamento)
-
 		if tinyResponse.Retorno.Status != "OK" {
 			fmt.Printf("Tiny API returned error for order %s (tiny_id: %s): %s\n", order.ID.Hex(), order.Tiny.ID, tinyResponse.Retorno.Status)
 			continue
@@ -606,17 +596,15 @@ func SyncOrdersTracking() error {
 
 		pedido := tinyResponse.Retorno.Pedido
 
-		if pedido.CodigoRastreamento != "" && pedido.URLRastreamento != "" {
+		if pedido.FormaFrete != "" {
 			tracking := Tracking{
 				Service: pedido.FormaFrete,
 				Url:     pedido.URLRastreamento,
 				Code:    pedido.CodigoRastreamento,
 			}
 
-			// Create new context for update operation
 			updateCtx, updateCancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-			// Reconnect to MongoDB for the update
 			mongoClient, err := mongo.Connect(options.Client().ApplyURI(os.Getenv(utils.MONGODB_URI)))
 			if err != nil {
 				updateCancel()
